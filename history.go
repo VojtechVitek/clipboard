@@ -31,7 +31,9 @@ func (h *History) Value(index int) string {
 
 func (h *History) WriteShortValues(w io.Writer) {
 	for i := len(h.records) - 1; i >= 0; i-- {
-		fmt.Fprintf(w, "%v: %s\n", len(h.records)-i, h.records[i].shortValue)
+		fmt.Fprintf(w, "%v: ", len(h.records)-i)
+		w.Write([]byte(h.records[i].shortValue))
+		fmt.Fprintln(w)
 	}
 }
 

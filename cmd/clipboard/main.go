@@ -47,113 +47,6 @@ func collectClipboard() {
 	}
 }
 
-func toSideView(g *gocui.Gui, v *gocui.View) error {
-	cx, cy := v.Cursor()
-
-	if cx > 0 || cy > 0 {
-		v.SetCursor(cx-1, cy)
-		return nil
-	}
-
-	_, err := g.SetCurrentView("side")
-	return err
-}
-
-func toMainView(g *gocui.Gui, v *gocui.View) error {
-	_, err := g.SetCurrentView("main")
-	return err
-}
-
-func cursorDown(g *gocui.Gui, v *gocui.View) error {
-	cx, cy := v.Cursor()
-	if cy+1 >= history.Len() {
-		return nil
-	}
-	g.Update(func(g *gocui.Gui) error {
-		mainView.Clear()
-		fmt.Fprintln(mainView, history.Value(cy+1))
-		return nil
-	})
-	if err := v.SetCursor(cx, cy+1); err != nil {
-		ox, oy := v.Origin()
-		if err := v.SetOrigin(ox, oy+1); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func cursorUp(g *gocui.Gui, v *gocui.View) error {
-	cx, cy := v.Cursor()
-	if cy == 0 {
-		return nil
-	}
-	g.Update(func(g *gocui.Gui) error {
-		mainView.Clear()
-		fmt.Fprintln(mainView, history.Value(cy-1))
-		return nil
-	})
-	if err := v.SetCursor(cx, cy-1); err != nil {
-		ox, oy := v.Origin()
-		if oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func getLine(g *gocui.Gui, v *gocui.View) error {
-	_, cy := v.Cursor()
-
-	value := history.Value(cy)
-	clipboard.Set(value)
-	historySave(value)
-
-	return nil
-}
-
-func quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
-}
-
-func keybindings(g *gocui.Gui) error {
-	if err := g.SetKeybinding("side", gocui.KeyTab, gocui.ModNone, toMainView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowRight, gocui.ModNone, toMainView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("main", gocui.KeyTab, gocui.ModNone, toSideView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("main", gocui.KeyArrowLeft, gocui.ModNone, toSideView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowUp, gocui.ModNone, cursorUp); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, getLine); err != nil {
-		return err
-	}
-
-	if err := g.SetKeybinding("main", gocui.KeyCtrlS, gocui.ModNone, saveVisualMain); err != nil {
-		return err
-	}
-	return nil
-}
-
-func saveVisualMain(g *gocui.Gui, v *gocui.View) error {
-	return clipboard.Set(v.ViewBuffer())
-}
-
 func main() {
 	go collectClipboard()
 
@@ -165,6 +58,7 @@ func main() {
 	defer gui.Close()
 
 	gui.Cursor = true
+	gui.Mouse = true
 
 	gui.SetManagerFunc(func(g *gocui.Gui) error {
 		maxX, maxY := g.Size()
@@ -208,4 +102,140 @@ func main() {
 	if err := gui.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
 	}
+}
+
+func toSideView(g *gocui.Gui, v *gocui.View) error {
+	cx, cy := v.Cursor()
+	if cx > 0 || cy > 0 {
+		v.SetCursor(cx-1, cy)
+		return nil
+	}
+
+	_, err := g.SetCurrentView("side")
+	return err
+}
+
+func toMainView(g *gocui.Gui, v *gocui.View) error {
+	_, err := g.SetCurrentView("main")
+	return err
+}
+
+func sideViewArrowDown(g *gocui.Gui, v *gocui.View) error {
+	cx, cy := v.Cursor()
+	if cy+1 >= history.Len() {
+		return nil
+	}
+	g.Update(func(g *gocui.Gui) error {
+		mainView.Clear()
+		fmt.Fprintln(mainView, history.Value(cy+1))
+		return nil
+	})
+	if err := v.SetCursor(cx, cy+1); err != nil {
+		ox, oy := v.Origin()
+		if err := v.SetOrigin(ox, oy+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sideViewArrowUp(g *gocui.Gui, v *gocui.View) error {
+	cx, cy := v.Cursor()
+	if cy == 0 {
+		return nil
+	}
+	g.Update(func(g *gocui.Gui) error {
+		mainView.Clear()
+		fmt.Fprintln(mainView, history.Value(cy-1))
+		return nil
+	})
+	if err := v.SetCursor(cx, cy-1); err != nil {
+		ox, oy := v.Origin()
+		if oy > 0 {
+			if err := v.SetOrigin(ox, oy-1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func sideViewClick(g *gocui.Gui, v *gocui.View) error {
+	if _, err := g.SetCurrentView(v.Name()); err != nil {
+		return err
+	}
+
+	cx, cy := v.Cursor()
+	if cy >= history.Len() {
+		cy = history.Len() - 1
+		if err := v.SetCursor(cx, cy); err != nil {
+			ox, oy := v.Origin()
+			if err := v.SetOrigin(ox, oy); err != nil {
+				return err
+			}
+		}
+	}
+
+	g.Update(func(g *gocui.Gui) error {
+		mainView.Clear()
+		fmt.Fprintln(mainView, history.Value(cy))
+		return nil
+	})
+
+	return nil
+}
+
+func sideViewEnter(g *gocui.Gui, v *gocui.View) error {
+	_, cy := v.Cursor()
+
+	value := history.Value(cy)
+	clipboard.Set(value)
+	historySave(value)
+
+	return nil
+}
+
+func quit(g *gocui.Gui, v *gocui.View) error {
+	return gocui.ErrQuit
+}
+
+func keybindings(g *gocui.Gui) error {
+	if err := g.SetKeybinding("side", gocui.KeyTab, gocui.ModNone, toMainView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("side", gocui.KeyArrowRight, gocui.ModNone, toMainView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("side", gocui.KeyArrowDown, gocui.ModNone, sideViewArrowDown); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("side", gocui.KeyArrowUp, gocui.ModNone, sideViewArrowUp); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, sideViewEnter); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("side", gocui.MouseLeft, gocui.ModNone, sideViewClick); err != nil {
+		return err
+	}
+
+	if err := g.SetKeybinding("main", gocui.KeyTab, gocui.ModNone, toSideView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("main", gocui.KeyArrowLeft, gocui.ModNone, toSideView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("main", gocui.KeyCtrlS, gocui.ModNone, saveVisualMain); err != nil {
+		return err
+	}
+
+	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func saveVisualMain(g *gocui.Gui, v *gocui.View) error {
+	return clipboard.Set(v.ViewBuffer())
 }
