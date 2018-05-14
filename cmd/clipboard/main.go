@@ -184,9 +184,7 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 	if cx == lastClickedCx && cy == lastClickedCy {
 		lastClickedCx, lastClickedCy = -1, -1
 		doubleClicked = true
-		if err := copyToClipboard(g, v); err != nil {
-			return err
-		}
+		return copyToClipboard(g, v)
 	}
 
 	lastClickedCx = cx
