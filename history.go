@@ -48,8 +48,15 @@ func (h *History) Len() int {
 
 func (h *History) Save(value string) bool {
 	if value == h.LatestValue() {
-		// TODO: Remove any duplicates and move up the value?
 		return false
+	}
+
+	// Move up any duplicates.
+	for i, record := range h.records {
+		if value == record.value {
+			h.records = append(append(h.records[:i], h.records[i+1:]...), record)
+			return true
+		}
 	}
 
 	shortValue := ""
@@ -61,14 +68,6 @@ func (h *History) Save(value string) bool {
 
 	shortValue = strings.Replace(shortValue, "\n", "↵", -1)
 	shortValue = strings.Replace(shortValue, "  ", " ", -1)
-
-	// Remove potential duplicates.
-	for i, record := range h.records {
-		if value == record.value {
-			h.records = append(h.records[:i], h.records[i+1:]...)
-			break // There is never more than one duplicate.
-		}
-	}
 
 	h.records = append(h.records, Record{
 		value:      value,
