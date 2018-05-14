@@ -15,6 +15,23 @@ var (
 	sideView, mainView *gocui.View
 )
 
+func historySave(value string) {
+	if history.Save(value) {
+		gui.Update(func(g *gocui.Gui) error {
+			sideView.Clear()
+			history.WriteShortValues(sideView)
+
+			_ = sideView.SetCursor(0, 0)
+			_ = sideView.SetOrigin(0, 0)
+
+			mainView.Clear()
+			fmt.Fprintf(mainView, value)
+
+			return nil
+		})
+	}
+}
+
 func collectClipboard() {
 	for {
 		value, err := clipboard.Get()
@@ -24,20 +41,7 @@ func collectClipboard() {
 			continue
 		}
 
-		if history.Save(value) {
-			gui.Update(func(g *gocui.Gui) error {
-				sideView.Clear()
-				history.WriteShortValues(sideView)
-
-				_ = sideView.SetCursor(0, 0)
-				_ = sideView.SetOrigin(0, 0)
-
-				mainView.Clear()
-				fmt.Fprintf(mainView, value)
-
-				return nil
-			})
-		}
+		historySave(value)
 
 		time.Sleep(1 * time.Second)
 	}
@@ -103,7 +107,9 @@ func cursorUp(g *gocui.Gui, v *gocui.View) error {
 func getLine(g *gocui.Gui, v *gocui.View) error {
 	_, cy := v.Cursor()
 
-	clipboard.Set(history.Value(cy))
+	value := history.Value(cy)
+	clipboard.Set(value)
+	historySave(value)
 
 	return nil
 }
