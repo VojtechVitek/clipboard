@@ -88,7 +88,7 @@ func main() {
 			if err != gocui.ErrUnknownView {
 				return err
 			}
-			fmt.Fprintln(helpView, "Copy: c/Enter | Edit: e/→ | Delete: d/Del/⌫ | Up: ↑ | Down: ↓ | Exit: q/Ctrl-C")
+			fmt.Fprintln(helpView, "Copy: double-click/Enter | Edit: click/→ | Delete: d/Del/⌫ | Up: ↑ | Down: ↓ | Exit: Ctrl-C")
 			helpView.Editable = false
 			helpView.Wrap = false
 		}
@@ -160,6 +160,11 @@ func sideViewArrowUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+var (
+	lastClickedCx, lastClickedCy = -1, -1
+	doubleClicked                bool
+)
+
 func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 	if _, err := g.SetCurrentView(v.Name()); err != nil {
 		return err
@@ -176,6 +181,17 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 		}
 	}
 
+	if cx == lastClickedCx && cy == lastClickedCy {
+		lastClickedCx, lastClickedCy = -1, -1
+		doubleClicked = true
+		if err := copyToClipboard(g, v); err != nil {
+			return err
+		}
+	}
+
+	lastClickedCx = cx
+	lastClickedCy = cy
+
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
 		fmt.Fprintln(mainView, history.Value(cy))
@@ -185,7 +201,38 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func sideViewEnter(g *gocui.Gui, v *gocui.View) error {
+func sideViewReleaseClick(g *gocui.Gui, v *gocui.View) error {
+	cx, cy := v.Cursor()
+	if cy >= history.Len() {
+		cy = history.Len() - 1
+		if err := v.SetCursor(cx, cy); err != nil {
+			ox, oy := v.Origin()
+			if err := v.SetOrigin(ox, oy); err != nil {
+				return err
+			}
+		}
+	}
+
+	if !doubleClicked {
+		return nil
+	}
+	defer func() {
+		lastClickedCx, lastClickedCy = -1, -1
+		doubleClicked = false
+	}()
+
+	// Set focus on the first line.
+	if err := v.SetCursor(0, 0); err != nil {
+		ox, oy := v.Origin()
+		if err := v.SetOrigin(ox, oy); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func copyToClipboard(g *gocui.Gui, v *gocui.View) error {
 	_, cy := v.Cursor()
 
 	value := history.Value(cy)
@@ -212,10 +259,13 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("side", gocui.KeyArrowUp, gocui.ModNone, sideViewArrowUp); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, sideViewEnter); err != nil {
+	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, copyToClipboard); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding("side", gocui.MouseLeft, gocui.ModNone, sideViewClick); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("side", gocui.MouseRelease, gocui.ModNone, sideViewReleaseClick); err != nil {
 		return err
 	}
 
