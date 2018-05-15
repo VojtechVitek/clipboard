@@ -245,40 +245,35 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func keybindings(g *gocui.Gui) error {
-	if err := g.SetKeybinding("side", gocui.KeyTab, gocui.ModNone, toMainView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowRight, gocui.ModNone, toMainView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowDown, gocui.ModNone, sideViewArrowDown); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowUp, gocui.ModNone, sideViewArrowUp); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, copyToClipboard); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.MouseLeft, gocui.ModNone, sideViewClick); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("side", gocui.MouseRelease, gocui.ModNone, sideViewReleaseClick); err != nil {
-		return err
-	}
-
-	if err := g.SetKeybinding("main", gocui.KeyTab, gocui.ModNone, toSideView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("main", gocui.KeyArrowLeft, gocui.ModNone, toSideView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("main", gocui.KeyCtrlS, gocui.ModNone, saveVisualMain); err != nil {
-		return err
+	bindings := map[string][]struct {
+		Key     interface{}
+		Handler func(*gocui.Gui, *gocui.View) error
+	}{
+		"side": {
+			{gocui.KeyTab, toMainView},
+			{gocui.KeyArrowRight, toMainView},
+			{gocui.KeyArrowDown, sideViewArrowDown},
+			{gocui.KeyArrowUp, sideViewArrowUp},
+			{gocui.KeyEnter, copyToClipboard},
+			{gocui.MouseLeft, sideViewClick},
+			{gocui.MouseRelease, sideViewReleaseClick},
+		},
+		"main": {
+			{gocui.KeyTab, toSideView},
+			{gocui.KeyArrowLeft, toSideView},
+			{gocui.KeyCtrlS, saveVisualMain},
+		},
+		"": {
+			{gocui.KeyCtrlC, quit},
+		},
 	}
 
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		return err
+	for view, bindings := range bindings {
+		for _, binding := range bindings {
+			if err := g.SetKeybinding(view, binding.Key, gocui.ModNone, binding.Handler); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
