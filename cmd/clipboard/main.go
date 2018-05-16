@@ -7,22 +7,30 @@ import (
 
 	"github.com/VojtechVitek/clipboard"
 	"github.com/jroimartin/gocui"
+	"github.com/pkg/errors"
 )
 
 var (
 	history            = clipboard.NewHistory()
 	gui                *gocui.Gui
 	sideView, mainView *gocui.View
+
+	lastClickedCx, lastClickedCy = -1, -1
+	doubleClicked                bool
 )
 
-func historySave(value string) {
+func copyToClipboard(value string) error {
 	if history.Save(value) {
 		gui.Update(func(g *gocui.Gui) error {
 			sideView.Clear()
 			history.WriteShortValues(sideView)
 
-			_ = sideView.SetCursor(0, 0)
-			_ = sideView.SetOrigin(0, 0)
+			if err := sideView.SetCursor(0, 0); err != nil {
+				return errors.Wrap(err, "failed to set origin")
+			}
+			if err := sideView.SetOrigin(0, 0); err != nil {
+				return errors.Wrap(err, "failed to set origin")
+			}
 
 			mainView.Clear()
 			fmt.Fprintf(mainView, value)
@@ -30,18 +38,20 @@ func historySave(value string) {
 			return nil
 		})
 	}
+
+	return nil
 }
 
-func collectClipboard() {
+func collectClipboard() error {
 	for {
 		value, err := clipboard.Get()
 		if err != nil {
-			log.Println(err)
-			time.Sleep(1 * time.Second)
-			continue
+			return errors.Wrap(err, "failed to collect clipboard")
 		}
 
-		historySave(value)
+		if err := copyToClipboard(value); err != nil {
+			return errors.Wrap(err, "failed to copy to clipboard")
+		}
 
 		time.Sleep(1 * time.Second)
 	}
@@ -51,9 +61,9 @@ func main() {
 	go collectClipboard()
 
 	var err error
-	gui, err = gocui.NewGui(gocui.OutputNormal)
+	gui, err = gocui.NewGui(gocui.Output256)
 	if err != nil {
-		log.Panicln(err)
+		log.Fatal(err)
 	}
 	defer gui.Close()
 
@@ -66,29 +76,20 @@ func main() {
 
 		sideView, err = g.SetView("side", -1, -1, 50, maxY-2)
 		if err != nil {
-			if err != gocui.ErrUnknownView {
-				return err
-			}
 			sideView.Highlight = true
 			sideView.SelBgColor = gocui.ColorGreen
 			sideView.SelFgColor = gocui.ColorBlack
 			if _, err := g.SetCurrentView("side"); err != nil {
-				return err
+				return errors.Wrap(err, "failed to set current view")
 			}
 		}
 		mainView, err = g.SetView("main", 50, -1, maxX, maxY-2)
 		if err != nil {
-			if err != gocui.ErrUnknownView {
-				return err
-			}
 			mainView.Editable = true
 			mainView.Wrap = true
 		}
 		if helpView, err := g.SetView("help", -1, maxY-2, maxX, maxY); err != nil {
-			if err != gocui.ErrUnknownView {
-				return err
-			}
-			fmt.Fprintln(helpView, "Copy: double-click/Enter | Edit: click/→ | Delete: d/Del/⌫ | Up: ↑ | Down: ↓ | Exit: Ctrl-C")
+			fmt.Fprintln(helpView, "Copy: double-click/Enter | Edit: click/→ | Delete: d/Del/⌫ | Exit: Ctrl-C")
 			helpView.Editable = false
 			helpView.Wrap = false
 		}
@@ -96,28 +97,48 @@ func main() {
 	})
 
 	if err := keybindings(gui); err != nil {
-		log.Panicln(err)
+		log.Fatal(err)
 	}
 
 	if err := gui.MainLoop(); err != nil && err != gocui.ErrQuit {
-		log.Panicln(err)
+		log.Fatalf("%+v", err)
 	}
 }
 
 func toSideView(g *gocui.Gui, v *gocui.View) error {
-	cx, cy := v.Cursor()
-	if cx > 0 || cy > 0 {
-		v.SetCursor(cx-1, cy)
-		return nil
+	lastClickedCx, lastClickedCy = -1, -1
+	doubleClicked = false
+
+	if _, err := g.SetCurrentView("side"); err != nil {
+		return errors.Wrap(err, "failed to set current view")
 	}
 
-	_, err := g.SetCurrentView("side")
-	return err
+	cx, cy := v.Cursor()
+	if cx > 0 {
+		return errors.Wrap(v.SetCursor(cx-1, cy), "failed to set cursor")
+	}
+
+	if err := clipboard.Set(v.ViewBuffer()); err != nil {
+		return errors.Wrap(err, "failed to save clipboard value from editor")
+	}
+
+	return nil
 }
 
 func toMainView(g *gocui.Gui, v *gocui.View) error {
-	_, err := g.SetCurrentView("main")
-	return err
+	lastClickedCx, lastClickedCy = -1, -1
+	doubleClicked = false
+
+	if _, err := g.SetCurrentView("main"); err != nil {
+		return errors.Wrap(err, "failed to set current view")
+	}
+
+	cx, cy := v.Cursor()
+	if cx > 0 || cy > 0 {
+		return v.SetCursor(cx-1, cy)
+	}
+
+	return nil
 }
 
 func sideViewArrowDown(g *gocui.Gui, v *gocui.View) error {
@@ -133,7 +154,7 @@ func sideViewArrowDown(g *gocui.Gui, v *gocui.View) error {
 	if err := v.SetCursor(cx, cy+1); err != nil {
 		ox, oy := v.Origin()
 		if err := v.SetOrigin(ox, oy+1); err != nil {
-			return err
+			return errors.Wrap(err, "failed to set origin")
 		}
 	}
 	return nil
@@ -153,21 +174,16 @@ func sideViewArrowUp(g *gocui.Gui, v *gocui.View) error {
 		ox, oy := v.Origin()
 		if oy > 0 {
 			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
+				return errors.Wrap(err, "failed to set origin")
 			}
 		}
 	}
 	return nil
 }
 
-var (
-	lastClickedCx, lastClickedCy = -1, -1
-	doubleClicked                bool
-)
-
 func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 	if _, err := g.SetCurrentView(v.Name()); err != nil {
-		return err
+		return errors.Wrap(err, "failed to set current view")
 	}
 
 	cx, cy := v.Cursor()
@@ -176,7 +192,7 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 		if err := v.SetCursor(cx, cy); err != nil {
 			ox, oy := v.Origin()
 			if err := v.SetOrigin(ox, oy); err != nil {
-				return err
+				return errors.Wrap(err, "failed to set origin")
 			}
 		}
 	}
@@ -184,7 +200,7 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 	if cx == lastClickedCx && cy == lastClickedCy {
 		lastClickedCx, lastClickedCy = -1, -1
 		doubleClicked = true
-		return copyToClipboard(g, v)
+		return copySelectedValueToClipboard(g, v)
 	}
 
 	lastClickedCx = cx
@@ -206,7 +222,7 @@ func sideViewReleaseClick(g *gocui.Gui, v *gocui.View) error {
 		if err := v.SetCursor(cx, cy); err != nil {
 			ox, oy := v.Origin()
 			if err := v.SetOrigin(ox, oy); err != nil {
-				return err
+				return errors.Wrap(err, "failed to set origin")
 			}
 		}
 	}
@@ -223,19 +239,21 @@ func sideViewReleaseClick(g *gocui.Gui, v *gocui.View) error {
 	if err := v.SetCursor(0, 0); err != nil {
 		ox, oy := v.Origin()
 		if err := v.SetOrigin(ox, oy); err != nil {
-			return err
+			return errors.Wrap(err, "failed to set origin")
 		}
 	}
 
 	return nil
 }
 
-func copyToClipboard(g *gocui.Gui, v *gocui.View) error {
+func copySelectedValueToClipboard(g *gocui.Gui, v *gocui.View) error {
 	_, cy := v.Cursor()
 
 	value := history.Value(cy)
 	clipboard.Set(value)
-	historySave(value)
+	if err := copyToClipboard(value); err != nil {
+		return errors.Wrap(err, "failed to copy to clipboard")
+	}
 
 	return nil
 }
@@ -246,7 +264,8 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 
 func keybindings(g *gocui.Gui) error {
 	bindings := map[string][]struct {
-		Key     interface{}
+		Key interface{}
+
 		Handler func(*gocui.Gui, *gocui.View) error
 	}{
 		"side": {
@@ -254,14 +273,14 @@ func keybindings(g *gocui.Gui) error {
 			{gocui.KeyArrowRight, toMainView},
 			{gocui.KeyArrowDown, sideViewArrowDown},
 			{gocui.KeyArrowUp, sideViewArrowUp},
-			{gocui.KeyEnter, copyToClipboard},
+			{gocui.KeyEnter, copySelectedValueToClipboard},
 			{gocui.MouseLeft, sideViewClick},
 			{gocui.MouseRelease, sideViewReleaseClick},
 		},
 		"main": {
-			{gocui.KeyTab, toSideView},
 			{gocui.KeyArrowLeft, toSideView},
-			{gocui.KeyCtrlS, saveVisualMain},
+			{gocui.MouseLeft, toMainView},
+			{gocui.KeyCtrlS, toSideView},
 		},
 		"": {
 			{gocui.KeyCtrlC, quit},
@@ -271,14 +290,10 @@ func keybindings(g *gocui.Gui) error {
 	for view, bindings := range bindings {
 		for _, binding := range bindings {
 			if err := g.SetKeybinding(view, binding.Key, gocui.ModNone, binding.Handler); err != nil {
-				return err
+				return errors.Wrap(err, "failed to set keybinding")
 			}
 		}
 	}
 
 	return nil
-}
-
-func saveVisualMain(g *gocui.Gui, v *gocui.View) error {
-	return clipboard.Set(v.ViewBuffer())
 }
