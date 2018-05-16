@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -33,7 +32,7 @@ func copyToClipboard(value string) error {
 			}
 
 			mainView.Clear()
-			fmt.Fprintf(mainView, value)
+			mainView.Write([]byte(value))
 
 			return nil
 		})
@@ -89,7 +88,7 @@ func main() {
 			mainView.Wrap = true
 		}
 		if helpView, err := g.SetView("help", -1, maxY-2, maxX, maxY); err != nil {
-			fmt.Fprintln(helpView, "Copy: double-click/Enter | Edit: click/→ | Delete: d/Del/⌫ | Exit: Ctrl-C")
+			helpView.Write([]byte("Copy: double-click/Enter | Edit: click/→ | Delete: d/Del/⌫ | Exit: Ctrl-C"))
 			helpView.Editable = false
 			helpView.Wrap = false
 		}
@@ -171,7 +170,7 @@ func sideViewArrowDown(g *gocui.Gui, v *gocui.View) error {
 	}
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
-		fmt.Fprintln(mainView, history.Value(cy+1))
+		mainView.Write([]byte(history.Value(cy + 1)))
 		return nil
 	})
 	if err := v.SetCursor(cx, cy+1); err != nil {
@@ -190,7 +189,7 @@ func sideViewArrowUp(g *gocui.Gui, v *gocui.View) error {
 	}
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
-		fmt.Fprintln(mainView, history.Value(cy-1))
+		mainView.Write([]byte(history.Value(cy - 1)))
 		return nil
 	})
 	if err := v.SetCursor(cx, cy-1); err != nil {
@@ -208,13 +207,16 @@ func ensureSideViewCursorBoundaries(g *gocui.Gui, v *gocui.View) (int, int, erro
 	cx, cy := v.Cursor()
 	if cy >= history.Len() {
 		cy = history.Len() - 1
-		if err := v.SetCursor(cx, cy); err != nil {
-			ox, oy := v.Origin()
-			if err := v.SetOrigin(ox, oy); err != nil {
-				return cx, cy, errors.Wrap(err, "failed to set origin")
-			}
+	}
+
+	// Set cursor to x=0, but return the original x value, so we can track double clicks etc.
+	if err := v.SetCursor(0, cy); err != nil {
+		ox, oy := v.Origin()
+		if err := v.SetOrigin(ox, oy); err != nil {
+			return cx, cy, errors.Wrap(err, "failed to set origin")
 		}
 	}
+
 	return cx, cy, nil
 }
 
@@ -239,7 +241,7 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
-		fmt.Fprintln(mainView, history.Value(cy))
+		mainView.Write([]byte(history.Value(cy)))
 		return nil
 	})
 
