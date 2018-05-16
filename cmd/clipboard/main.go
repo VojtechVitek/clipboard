@@ -133,11 +133,6 @@ func toMainView(g *gocui.Gui, v *gocui.View) error {
 		return errors.Wrap(err, "failed to set current view")
 	}
 
-	cx, cy := v.Cursor()
-	if cx > 0 || cy > 0 {
-		return v.SetCursor(cx-1, cy)
-	}
-
 	return nil
 }
 
@@ -258,10 +253,6 @@ func copySelectedValueToClipboard(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
-}
-
 func keybindings(g *gocui.Gui) error {
 	bindings := map[string][]struct {
 		Key interface{}
@@ -283,7 +274,9 @@ func keybindings(g *gocui.Gui) error {
 			{gocui.KeyCtrlS, toSideView},
 		},
 		"": {
-			{gocui.KeyCtrlC, quit},
+			{gocui.KeyCtrlC, func(g *gocui.Gui, v *gocui.View) error {
+				return gocui.ErrQuit
+			}},
 		},
 	}
 
