@@ -148,7 +148,7 @@ func ensureMainViewCursorBoundaries(g *gocui.Gui, v *gocui.View) error {
 	mainViewLines := v.BufferLines()
 
 	cx, cy := v.Cursor()
-	if cy > len(mainViewLines) {
+	if cy >= len(mainViewLines) {
 		cy = len(mainViewLines) - 1
 		if err := v.SetCursor(cx, cy); err != nil {
 			return errors.Wrap(err, "failed to set cursor")
