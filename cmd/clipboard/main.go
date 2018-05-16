@@ -113,16 +113,24 @@ func toSideView(g *gocui.Gui, v *gocui.View) error {
 		return errors.Wrap(err, "failed to set current view")
 	}
 
+	mainViewBuffer := v.Buffer()
+	// The .Buffer() method adds an extra \n at the end of the string. Let's get rid of it.
+	mainViewBuffer = mainViewBuffer[:len(mainViewBuffer)-1]
+
+	if err := clipboard.Set(mainViewBuffer); err != nil {
+		return errors.Wrap(err, "failed to save clipboard value from editor")
+	}
+
+	return nil
+}
+
+func moveLeftOrToSideView(g *gocui.Gui, v *gocui.View) error {
 	cx, cy := v.Cursor()
 	if cx > 0 {
 		return errors.Wrap(v.SetCursor(cx-1, cy), "failed to set cursor")
 	}
 
-	if err := clipboard.Set(v.ViewBuffer()); err != nil {
-		return errors.Wrap(err, "failed to save clipboard value from editor")
-	}
-
-	return nil
+	return toSideView(g, v)
 }
 
 func toMainView(g *gocui.Gui, v *gocui.View) error {
@@ -131,6 +139,26 @@ func toMainView(g *gocui.Gui, v *gocui.View) error {
 
 	if _, err := g.SetCurrentView("main"); err != nil {
 		return errors.Wrap(err, "failed to set current view")
+	}
+
+	return ensureMainViewCursorBoundaries(g, v)
+}
+
+func ensureMainViewCursorBoundaries(g *gocui.Gui, v *gocui.View) error {
+	mainViewLines := v.BufferLines()
+
+	cx, cy := v.Cursor()
+	if cy > len(mainViewLines) {
+		cy = len(mainViewLines) - 1
+		if err := v.SetCursor(cx, cy); err != nil {
+			return errors.Wrap(err, "failed to set cursor")
+		}
+	}
+
+	if cx > len(mainViewLines[cy]) {
+		if err := v.SetCursor(len(mainViewLines[cy]), cy); err != nil {
+			return errors.Wrap(err, "failed to set cursor")
+		}
 	}
 
 	return nil
@@ -176,20 +204,28 @@ func sideViewArrowUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func sideViewClick(g *gocui.Gui, v *gocui.View) error {
-	if _, err := g.SetCurrentView(v.Name()); err != nil {
-		return errors.Wrap(err, "failed to set current view")
-	}
-
+func ensureSideViewCursorBoundaries(g *gocui.Gui, v *gocui.View) (int, int, error) {
 	cx, cy := v.Cursor()
 	if cy >= history.Len() {
 		cy = history.Len() - 1
 		if err := v.SetCursor(cx, cy); err != nil {
 			ox, oy := v.Origin()
 			if err := v.SetOrigin(ox, oy); err != nil {
-				return errors.Wrap(err, "failed to set origin")
+				return cx, cy, errors.Wrap(err, "failed to set origin")
 			}
 		}
+	}
+	return cx, cy, nil
+}
+
+func sideViewClick(g *gocui.Gui, v *gocui.View) error {
+	if _, err := g.SetCurrentView(v.Name()); err != nil {
+		return errors.Wrap(err, "failed to set current view")
+	}
+
+	cx, cy, err := ensureSideViewCursorBoundaries(g, v)
+	if err != nil {
+		return errors.Wrap(err, "failed to ensure side view boundaries")
 	}
 
 	if cx == lastClickedCx && cy == lastClickedCy {
@@ -211,15 +247,8 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 }
 
 func sideViewReleaseClick(g *gocui.Gui, v *gocui.View) error {
-	cx, cy := v.Cursor()
-	if cy >= history.Len() {
-		cy = history.Len() - 1
-		if err := v.SetCursor(cx, cy); err != nil {
-			ox, oy := v.Origin()
-			if err := v.SetOrigin(ox, oy); err != nil {
-				return errors.Wrap(err, "failed to set origin")
-			}
-		}
+	if _, _, err := ensureSideViewCursorBoundaries(g, v); err != nil {
+		return errors.Wrap(err, "failed to ensure side view boundaries")
 	}
 
 	if !doubleClicked {
@@ -269,9 +298,10 @@ func keybindings(g *gocui.Gui) error {
 			{gocui.MouseRelease, sideViewReleaseClick},
 		},
 		"main": {
-			{gocui.KeyArrowLeft, toSideView},
+			{gocui.KeyArrowLeft, moveLeftOrToSideView},
 			{gocui.MouseLeft, toMainView},
 			{gocui.KeyCtrlS, toSideView},
+			{gocui.MouseRelease, ensureMainViewCursorBoundaries},
 		},
 		"": {
 			{gocui.KeyCtrlC, func(g *gocui.Gui, v *gocui.View) error {
