@@ -32,9 +32,8 @@ func copyToClipboard(value string) error {
 			}
 
 			mainView.Clear()
-			mainView.Write([]byte(value))
-
-			return nil
+			_, err := mainView.Write([]byte(value))
+			return err
 		})
 	}
 
@@ -170,8 +169,8 @@ func sideViewArrowDown(g *gocui.Gui, v *gocui.View) error {
 	}
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
-		mainView.Write([]byte(history.Value(cy + 1)))
-		return nil
+		_, err := mainView.Write([]byte(history.Value(cy + 1)))
+		return err
 	})
 	if err := v.SetCursor(cx, cy+1); err != nil {
 		ox, oy := v.Origin()
@@ -189,8 +188,8 @@ func sideViewArrowUp(g *gocui.Gui, v *gocui.View) error {
 	}
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
-		mainView.Write([]byte(history.Value(cy - 1)))
-		return nil
+		_, err := mainView.Write([]byte(history.Value(cy - 1)))
+		return err
 	})
 	if err := v.SetCursor(cx, cy-1); err != nil {
 		ox, oy := v.Origin()
@@ -211,8 +210,8 @@ func ensureSideViewCursorBoundaries(g *gocui.Gui, v *gocui.View) (int, int, erro
 
 	// Set cursor to x=0, but return the original x value, so we can track double clicks etc.
 	if err := v.SetCursor(0, cy); err != nil {
-		ox, oy := v.Origin()
-		if err := v.SetOrigin(ox, oy); err != nil {
+		_, oy := v.Origin()
+		if err := v.SetOrigin(0, oy); err != nil {
 			return cx, cy, errors.Wrap(err, "failed to set origin")
 		}
 	}
@@ -241,8 +240,8 @@ func sideViewClick(g *gocui.Gui, v *gocui.View) error {
 
 	g.Update(func(g *gocui.Gui) error {
 		mainView.Clear()
-		mainView.Write([]byte(history.Value(cy)))
-		return nil
+		_, err := mainView.Write([]byte(history.Value(cy)))
+		return err
 	})
 
 	return nil
