@@ -20,10 +20,6 @@ var (
 
 func copyToClipboard(value string) error {
 	if history.Save(value) {
-		if err := clipboard.Set(value); err != nil {
-			return errors.Wrap(err, "failed to save clipboard value from editor")
-		}
-
 		gui.Update(func(g *gocui.Gui) error {
 			sideView.Clear()
 			history.WriteShortValues(sideView)
@@ -39,6 +35,10 @@ func copyToClipboard(value string) error {
 			_, err := mainView.Write([]byte(value))
 			return err
 		})
+
+		if err := clipboard.Set(value); err != nil {
+			return errors.Wrap(err, "failed to save clipboard value from editor")
+		}
 	}
 
 	return nil
