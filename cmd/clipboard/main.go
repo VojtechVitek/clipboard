@@ -20,6 +20,10 @@ var (
 
 func copyToClipboard(value string) error {
 	if history.Save(value) {
+		if err := clipboard.Set(value); err != nil {
+			return errors.Wrap(err, "failed to save clipboard value from editor")
+		}
+
 		gui.Update(func(g *gocui.Gui) error {
 			sideView.Clear()
 			history.WriteShortValues(sideView)
@@ -113,10 +117,12 @@ func toSideView(g *gocui.Gui, v *gocui.View) error {
 
 	mainViewBuffer := v.Buffer()
 	// The .Buffer() method adds an extra \n at the end of the string. Let's get rid of it.
-	mainViewBuffer = mainViewBuffer[:len(mainViewBuffer)-1]
+	if len(mainViewBuffer) > 0 && mainViewBuffer[len(mainViewBuffer)-1] == '\n' {
+		mainViewBuffer = mainViewBuffer[:len(mainViewBuffer)-1]
+	}
 
-	if err := clipboard.Set(mainViewBuffer); err != nil {
-		return errors.Wrap(err, "failed to save clipboard value from editor")
+	if err := copyToClipboard(mainViewBuffer); err != nil {
+		return errors.Wrap(err, "failed to copy to clipboard")
 	}
 
 	return nil
